@@ -46,6 +46,14 @@
       <pose>0 7 -10 0 0 0</pose>
     </include>
 
+    <!-- Static obstacle course around the spawn point.
+         Everything in this model is static: buoyancy and hydrodynamics
+         only act on the ROV. Remove this block for an empty seabed. -->
+    <include>
+      <uri>model://sim_course</uri>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+
     <include>
       <uri>model://bluerov2_heavy</uri>
       <pose>0 0 -2 0 0 0</pose>
