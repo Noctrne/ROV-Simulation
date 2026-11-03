@@ -8,6 +8,30 @@ HydrodynamicsPlugin and ThrusterPlugin.
 
 ![bluerov2_gz](images/bluerov2.png)
 
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [RUNBOOK_SIMULASI.md](RUNBOOK_SIMULASI.md) | Step-by-step simulation runbook (Bahasa Indonesia): prerequisites, Gazebo + ArduSub SITL + QGroundControl, testing an external ROS 2 program, troubleshooting |
+| [models/sim_course/README.md](models/sim_course/README.md) | Static obstacle course: layout, coordinate table, how to move or remove pieces |
+
+The repo is tested with `~/ardupilot_gazebo` and `~/ardupilot_sitl`; see the
+runbook for the exact commands and the `--out` MAVLink endpoints used to feed a
+ROS 2 control program.
+
+## Helper scripts
+
+| Script | Purpose |
+|---|---|
+| `scripts/start_sim.sh [world]` | Start Gazebo with the right environment. Refuses to start if another Gazebo server is already running. |
+| `scripts/check_sim.sh` | Detect and clean up leftover Gazebo / SITL / MAVProxy sessions. |
+| `scripts/cw.sh`, `ccw.sh`, `forward.sh`, `up.sh`, `down.sh`, `stop.sh` | Send raw thrust commands to a model (no ArduPilot needed). |
+
+> Two Gazebo servers publishing to the same world topics make the ROV flicker
+> between two positions and make the scene appear to slide. Always clean up
+> first. Note that the `gz sim` process is named `ruby`, so `pkill -x gz` does
+> nothing — use `pkill -9 -f '^gz sim'`.
+
 ## Requirements
 
 Please ensure that the following requirements have been met prior to installing the
@@ -33,6 +57,11 @@ where `<gazebo-world-file>` should be replaced with:
 * `bluerov2_underwater.world` for the BlueROV2 base configuration
 * `bluerov2_heavy_underwater.world` for the BlueROV2 Heavy configuration
 * `bluerov2_ping.world` for a BlueROV2 base with a Ping sonar
+
+All three worlds include the static `sim_course` obstacle course around the
+spawn point (gates, slalom poles, a pipe hurdle, a pipeline, concrete blocks,
+rocks, a target board and a marker buoy). Remove that `<include>` block from
+the world file to get an empty seabed again.
 
 Once Gazebo has been launched, you can directly send thrust commands to the BlueROV2
 model in Gazebo:
