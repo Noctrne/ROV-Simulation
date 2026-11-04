@@ -21,6 +21,13 @@
             name="gz::sim::systems::Imu">
     </plugin>
 
+    <!-- Sensors plugin renders camera sensors. Required by the FPV camera
+         on bluerov2_heavy; without it the camera produces no images. -->
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
     <!-- Buoyancy plugin manages buoyancy for all models -->
     <plugin
         filename="gz-sim-buoyancy-system"

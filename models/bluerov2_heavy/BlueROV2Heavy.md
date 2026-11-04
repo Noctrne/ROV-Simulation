@@ -23,6 +23,44 @@ export GZ_SIM_RESOURCE_PATH=$GZ_SIM_RESOURCE_PATH:\
 gz sim -v 3 -r bluerov2_heavy_underwater.world
 ~~~
 
+### FPV camera
+
+This model has a forward-looking camera on the nose (`fpv_camera` on
+`base_link`, 640x480, 15 Hz). It is rendered by the `gz-sim-sensors-system`
+plugin in `bluerov2_heavy_underwater.world`.
+
+To see its image in a Gazebo panel:
+
+~~~bash
+~/ROV-Simulation/scripts/start_sim.sh --fpv
+~~~
+
+Image topic:
+
+~~~text
+/world/bluerov2_heavy_underwater/model/bluerov2_heavy/link/base_link/sensor/fpv_camera/image
+~~~
+
+The 3D view is still a free camera, so **Entity Tree → right click on
+`bluerov2_heavy` → Follow** (TPP) works at the same time as the FPV panel.
+
+### Editing this model
+
+`model.sdf` is generated — do not edit it by hand. The camera, thrusters and
+plugin parameters live in `model.sdf.in`, where `@name` tokens are substituted
+from `configs.yaml`. After editing, regenerate:
+
+~~~bash
+cd ~/ROV-Simulation
+python3 scripts/generate_model.py \
+  models/bluerov2_heavy/model.sdf.in \
+  models/bluerov2_heavy/model.sdf \
+  models/bluerov2_heavy/configs.yaml
+~~~
+
+> If you only edit `model.sdf`, the next regeneration silently drops your
+> change (including the FPV camera).
+
 ### Run ArduPilot SITL
 
 ~~~bash
