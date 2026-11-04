@@ -14,12 +14,58 @@
 #   ./scripts/start_sim.sh                        # bluerov2_heavy (8 thruster)
 #   ./scripts/start_sim.sh bluerov2_underwater.world
 #   ./scripts/start_sim.sh bluerov2_ping.world
+#   ./scripts/start_sim.sh --fpv                  # + panel kamera FPV
+#   ./scripts/start_sim.sh bluerov2_heavy_underwater.world --fpv
+#
+# Flag --fpv menambahkan panel "FPV camera" di samping 3D view. Panel itu
+# menampilkan gambar dari sensor `fpv_camera` di hidung bluerov2_heavy.
+# 3D view tetap kamera bebas, jadi fitur Follow (TPP) tetap bisa dipakai
+# bersamaan. Tanpa flag ini, tampilan Gazebo sama persis seperti sebelumnya.
 # ==============================================================================
 
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORLD_NAME="${1:-bluerov2_heavy_underwater.world}"
+WORLD_NAME=""
+USE_FPV=0
+
+#------------------------------------------------------------------------------
+# 0. Parsing argumen (world boleh di mana saja, flag boleh di mana saja)
+#------------------------------------------------------------------------------
+for arg in "$@"; do
+    case "$arg" in
+        --fpv)   USE_FPV=1 ;;
+        -h|--help)
+            # Print the whole leading comment block (lines 2.. up to the
+            # closing ==== line), with the leading "# " stripped.
+            awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "${BASH_SOURCE[0]}"
+            exit 0
+            ;;
+        -*)
+            echo "[ERROR] Flag tidak dikenal: $arg"
+            echo "        Yang tersedia: --fpv"
+            exit 1
+            ;;
+        *)
+            if [ -n "$WORLD_NAME" ]; then
+                echo "[ERROR] World disebut lebih dari sekali: $WORLD_NAME, $arg"
+                exit 1
+            fi
+            WORLD_NAME="$arg"
+            ;;
+    esac
+done
+WORLD_NAME="${WORLD_NAME:-bluerov2_heavy_underwater.world}"
+
+#------------------------------------------------------------------------------
+# 0b. Cek world vs FPV
+#------------------------------------------------------------------------------
+# Saat ini hanya bluerov2_heavy yang punya sensor fpv_camera.
+if [ "$USE_FPV" -eq 1 ] && [ "$WORLD_NAME" != "bluerov2_heavy_underwater.world" ]; then
+    echo "[ERROR] --fpv hanya tersedia untuk bluerov2_heavy_underwater.world."
+    echo "        World '$WORLD_NAME' belum punya sensor kamera."
+    exit 1
+fi
 
 #------------------------------------------------------------------------------
 # 1. Tolak jalan kalau sudah ada server Gazebo
@@ -70,6 +116,12 @@ echo "=========================================================="
 echo "Repo   : $REPO_DIR"
 echo "World  : $WORLD_NAME"
 echo "Plugin : $HOME/ardupilot_gazebo/build"
+if [ "$USE_FPV" -eq 1 ]; then
+    echo "Kamera : FPV aktif (panel kanan, gambar dari hidung ROV)"
+    echo "         TPP tetap: klik kanan bluerov2_heavy di Entity Tree > Follow"
+else
+    echo "Kamera : TPP saja (pakai --fpv untuk panel FPV)"
+fi
 echo ""
 echo "Setelah Gazebo terbuka, jalankan ArduSub SITL di terminal lain:"
 echo "  cd ~/ardupilot_sitl"
@@ -82,4 +134,8 @@ echo "=========================================================="
 # 4. Jalan
 #------------------------------------------------------------------------------
 cd "$REPO_DIR"
+
+if [ "$USE_FPV" -eq 1 ]; then
+    exec gz sim -v 3 -r --gui-config "$REPO_DIR/worlds/fpv_gui.config" "$WORLD_PATH"
+fi
 exec gz sim -v 3 -r "$WORLD_PATH"
