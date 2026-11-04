@@ -24,6 +24,7 @@ ROS 2 control program.
 | Script | Purpose |
 |---|---|
 | `scripts/start_sim.sh [world]` | Start Gazebo with the right environment. Refuses to start if another Gazebo server is already running. |
+| `scripts/start_sim.sh [world] --fpv` | Same, plus an FPV camera panel next to the 3D view (image from the nose of `bluerov2_heavy`). The 3D view stays a free camera, so Follow (TPP) still works. |
 | `scripts/check_sim.sh` | Detect and clean up leftover Gazebo / SITL / MAVProxy sessions. |
 | `scripts/cw.sh`, `ccw.sh`, `forward.sh`, `up.sh`, `down.sh`, `stop.sh` | Send raw thrust commands to a model (no ArduPilot needed). |
 
@@ -62,6 +63,37 @@ All three worlds include the static `sim_course` obstacle course around the
 spawn point (gates, slalom poles, a pipe hurdle, a pipeline, concrete blocks,
 rocks, a target board and a marker buoy). Remove that `<include>` block from
 the world file to get an empty seabed again.
+
+### Cameras: TPP and FPV
+
+The 3D view in Gazebo is a free camera, not a robot camera. The third-person
+view (TPP) you get with **Entity Tree → right click on `bluerov2_heavy` →
+Follow** is that free camera chasing the model.
+
+A first-person view (FPV) therefore needs a real camera sensor on the model.
+`bluerov2_heavy` has one: `fpv_camera` on `base_link`, at the nose, looking
+forward. Start Gazebo with a GUI config that shows its image:
+
+~~~bash
+./scripts/start_sim.sh --fpv
+~~~
+
+A panel called **FPV camera** then appears next to the 3D view. The 3D view is
+unchanged, so Follow (TPP) keeps working at the same time — switching cameras
+just means looking at the other panel. Without `--fpv`, Gazebo behaves exactly
+as before.
+
+The camera is rendered by the `gz-sim-sensors-system` plugin in
+`worlds/bluerov2_heavy_underwater.world`; the panel is defined in
+`worlds/fpv_gui.config`. Image topic:
+
+~~~text
+/world/bluerov2_heavy_underwater/model/bluerov2_heavy/link/base_link/sensor/fpv_camera/image
+~~~
+
+Only `bluerov2_heavy` has a camera so far. The sensor has no collision, so
+mass, buoyancy and hydrodynamics are unaffected; it only costs render time
+(measured ~7% RTF at 15 Hz on this machine).
 
 Once Gazebo has been launched, you can directly send thrust commands to the BlueROV2
 model in Gazebo:

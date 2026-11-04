@@ -18,6 +18,7 @@ Konfigurasi yang dipakai di seluruh dokumen:
 | Model | `bluerov2_heavy` (8 thruster) |
 | World | `bluerov2_heavy_underwater.world` |
 | Arena | `sim_course` — obstacle course statis (lihat §1.5) |
+| Kamera | TPP (Follow) dan FPV opsional via `--fpv` (lihat §1.6) |
 | Frame SITL | `vectored_6dof` (`FRAME_CONFIG = 2`) |
 | Fisika | Gazebo Harmonic (`gz sim`) |
 | Autopilot | ArduSub SITL dari `~/ardupilot_sitl` |
@@ -30,6 +31,7 @@ Ada dua script bantuan yang dipakai sepanjang runbook ini:
 |---|---|
 | `scripts/check_sim.sh` | Cek & bersihkan sesi Gazebo/SITL/MAVProxy yang tertinggal. **Jalankan sebelum mulai.** |
 | `scripts/start_sim.sh` | Start Gazebo + set environment. **Menolak start** kalau sudah ada server Gazebo lain. |
+| `scripts/start_sim.sh --fpv` | Sama, tapi menambah panel kamera FPV di samping 3D view (lihat §1.6). |
 
 Sisanya (`cw.sh`, `ccw.sh`, `forward.sh`, `up.sh`, `down.sh`, `stop.sh`) adalah
 utilitas lama untuk mengirim thrust langsung ke Gazebo tanpa ArduPilot.
@@ -127,6 +129,92 @@ Untuk kembali ke laut kosong, hapus/comment blok berikut di file world:
 > fisika ROV. Sudah diukur: saat ROV bergerak 1.2 m, semua link arena tetap
 > pada `delta = (0.0, 0.0, 0.0)`.
 
+### 1.6 Kamera: TPP vs FPV
+
+Ada dua cara melihat ROV, dan keduanya bisa aktif bersamaan:
+
+| Mode | Sumber gambar | Cara mengaktifkan |
+|---|---|---|
+| **TPP** (third person) | kamera bebas milik GUI Gazebo | klik kanan `bluerov2_heavy` di **Entity Tree** → **Follow** |
+| **FPV** (first person) | sensor `fpv_camera` di hidung ROV | start dengan `./scripts/start_sim.sh --fpv` |
+
+Penting dipahami: **TPP bukan kamera robot.** Fitur *Follow* hanya membuat
+kamera bebas GUI mengejar model. Karena itu FPV butuh sensor kamera sungguhan
+di dalam model — dan sensor itulah yang ditambahkan di `bluerov2_heavy`.
+
+Spesifikasi sensor (`models/bluerov2_heavy/model.sdf.in`):
+
+| Parameter | Nilai |
+|---|---|
+| Nama sensor | `fpv_camera` (di `base_link`) |
+| Posisi | `0.15 0 0.09` — di hidung, menghadap `+x` (maju) |
+| Resolusi | 640 × 480 |
+| `horizontal_fov` | 1.2 rad (±69°) |
+| `update_rate` | 15 Hz |
+
+Topik gambar yang dihasilkan:
+
+```text
+/world/bluerov2_heavy_underwater/model/bluerov2_heavy/link/base_link/sensor/fpv_camera/image
+```
+
+Cek dari terminal lain:
+
+```bash
+gz topic -l | grep fpv_camera
+gz topic -e -t /world/bluerov2_heavy_underwater/model/bluerov2_heavy/link/base_link/sensor/fpv_camera/image -n 1
+```
+
+#### Cara pakai
+
+```bash
+./scripts/start_sim.sh --fpv
+```
+
+Panel **FPV camera** muncul di sisi kanan jendela Gazebo, di samping 3D view.
+3D view tetap kamera bebas, jadi skenario TPP Anda tidak berubah: klik kanan
+ROV → **Follow** seperti biasa. Untuk "pindah kamera", cukup lihat panel yang
+berbeda — tidak ada mode yang perlu dimatikan.
+
+Tanpa flag `--fpv`, tampilan Gazebo sama persis seperti sebelumnya (tidak ada
+panel FPV, tidak ada perubahan perilaku).
+
+#### Syarat teknis
+
+- World `bluerov2_heavy_underwater.world` sudah memuat plugin
+  `gz-sim-sensors-system` (dengan `<render_engine>ogre2</render_engine>`).
+  Tanpa plugin ini sensor kamera tidak menghasilkan gambar apa pun.
+- Panel FPV ada di file terpisah `worlds/fpv_gui.config`, dipakai lewat
+  `gz sim --gui-config`. File ini tidak mengubah `~/.gz/sim/8/gui.config`
+  milik Anda.
+- Hanya `bluerov2_heavy` yang punya kamera. `--fpv` dengan world lain akan
+  ditolak script.
+
+#### Catatan performa
+
+Kamera menambah kerja render. Diukur di PC ini (server saja, tanpa GUI):
+
+| Kondisi | RTF | Laju iterasi |
+|---|---|---|
+| Tanpa kamera (world base) | 0.83 | ~157 iterasi/s |
+| Dengan kamera 15 Hz | 0.78 | ~159 iterasi/s |
+
+Selisihnya sekitar 7%, jadi 15 Hz aman. Kalau suatu saat RTF turun drastis:
+
+- turunkan `<update_rate>` di `model.sdf.in` menjadi `10`;
+- atau set `update_rate` ke `0` saat kamera tidak dipakai.
+
+> Sensor kamera **tidak** menambah collision, jadi massa, buoyancy, dan
+> hidrodinamika ROV tidak berubah sama sekali. Biayanya hanya render.
+
+#### Kalau panel FPV hitam
+
+| Penyebab | Solusi |
+|---|---|
+| World lain (bukan `bluerov2_heavy`) | kamera hanya ada di `bluerov2_heavy` |
+| Plugin `gz-sim-sensors-system` hilang dari world | tambahkan lagi (lihat §1.6 Syarat teknis) |
+| Gazebo baru start dan `lock_step` menunggu SITL | jalankan SITL dulu (§3 A2), gambar muncul setelah sim berjalan |
+| Simulasi masih paused | tekan Play di panel World control |
 
 ---
 
@@ -191,6 +279,14 @@ Atau lewat script yang sudah menolak jalan kalau ada server lain:
 ```bash
 ~/ROV-Simulation/scripts/start_sim.sh
 ```
+
+Kalau ingin panel kamera FPV (tampilan dari hidung ROV), tambahkan flag:
+
+```bash
+~/ROV-Simulation/scripts/start_sim.sh --fpv
+```
+
+Detail mode TPP/FPV ada di §1.6.
 
 Yang diharapkan:
 
@@ -432,6 +528,7 @@ Input harus dikirim ≥ 20 Hz. Berhenti lebih dari 0,5 detik = failsafe
 Skenario A (basic + QGC)
   A0  ./scripts/check_sim.sh          # WAJIB: bersihkan sesi lama
   A1  ./scripts/start_sim.sh          # atau gz sim langsung
+      ./scripts/start_sim.sh --fpv    # opsional: + panel kamera FPV
   A2  sim_vehicle.py -f vectored_6dof -N --model=JSON
   A3  QGroundControl AppImage
 
@@ -482,6 +579,10 @@ Urutan start selalu: **bersihkan → Gazebo → SITL → QGC → node ROS.**
    `./scripts/start_sim.sh` yang sudah menolak start kalau ada server lain.
 8. **Jangan pakai `pkill -x gz`.** Proses `gz sim` bernama `ruby`.
    Gunakan `pkill -9 -f '^gz sim'`.
+9. **Edit `model.sdf.in`, bukan `model.sdf`.**
+   `model.sdf` adalah hasil generate (`scripts/generate_model.py`). Kalau
+   hanya `.sdf` yang diedit, perubahan hilang pada regenerate berikutnya —
+   termasuk sensor `fpv_camera`.
 
 ---
 
@@ -495,6 +596,8 @@ Urutan start selalu: **bersihkan → Gazebo → SITL → QGC → node ROS.**
 | QGC tidak connect | SITL belum jalan, atau `--no-extra-ports` dipakai | jalankan SITL tanpa `--no-extra-ports` |
 | `control_node` menunggu heartbeat | port `14551` tidak ada / SITL belum siap | pastikan `--out 127.0.0.1:14551` ada, lalu restart node |
 | ROV di Gazebo tidak bergerak walau armed | frame tidak cocok / Gazebo paused | `param show FRAME_CONFIG` harus 2; tekan Play |
+| Panel FPV hitam | world bukan `bluerov2_heavy`, atau `lock_step` masih menunggu SITL | pakai `bluerov2_heavy_underwater.world`; jalankan SITL (A2); tekan Play (§1.6) |
+| `--fpv` ditolak script | world itu belum punya sensor kamera | hanya `bluerov2_heavy_underwater.world` yang punya `fpv_camera` |
 
 ---
 
@@ -543,3 +646,5 @@ ROV bergerak ±1.2 m saat thruster diberi perintah.
 - BlueROV2 SITL (upstream): <https://github.com/clydemcqueen/bluerov2_gz>
 - ArduSub SITL: <https://ardupilot.org/dev/docs/setting-up-sitl-on-linux.html>
 - MAVProxy: <https://ardupilot.org/mavproxy/docs/getting_started/download_and_installation.html>
+- Sensor kamera Gazebo: <https://gazebosim.org/docs/harmonic/sensors>
+- Plugin GUI `ImageDisplay`: <https://gazebosim.org/docs/harmonic/gui_config>
