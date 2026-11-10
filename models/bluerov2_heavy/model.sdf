@@ -59,9 +59,13 @@
         <pose>0.15 0 0.09 0 0 0</pose>
         <camera>
           <horizontal_fov>1.2</horizontal_fov>
+          <!-- 1280x720 (16:9) for SAUVC detection: a 1.5 m gate at 10 m
+               projects to ~3 px per post instead of ~1 px at 640x480.
+               Horizontal FOV is unchanged, so the vertical FOV narrows to
+               ~42 deg. Change both here and in the detection config. -->
           <image>
-            <width>640</width>
-            <height>480</height>
+            <width>1280</width>
+            <height>720</height>
           </image>
           <clip>
             <near>0.05</near>

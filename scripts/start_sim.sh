@@ -14,13 +14,16 @@
 #   ./scripts/start_sim.sh                        # bluerov2_heavy (8 thruster)
 #   ./scripts/start_sim.sh bluerov2_underwater.world
 #   ./scripts/start_sim.sh bluerov2_ping.world
+#   ./scripts/start_sim.sh sauvc_qualification.world
 #   ./scripts/start_sim.sh --fpv                  # + panel kamera FPV
-#   ./scripts/start_sim.sh bluerov2_heavy_underwater.world --fpv
+#   ./scripts/start_sim.sh sauvc_qualification.world --fpv
 #
 # Flag --fpv menambahkan panel "FPV camera" di samping 3D view. Panel itu
 # menampilkan gambar dari sensor `fpv_camera` di hidung bluerov2_heavy.
 # 3D view tetap kamera bebas, jadi fitur Follow (TPP) tetap bisa dipakai
 # bersamaan. Tanpa flag ini, tampilan Gazebo sama persis seperti sebelumnya.
+# Flag ini jalan untuk world apa pun yang memuat model://bluerov2_heavy;
+# topik kamera disesuaikan otomatis dengan nama world.
 # ==============================================================================
 
 set -euo pipefail
@@ -58,16 +61,6 @@ done
 WORLD_NAME="${WORLD_NAME:-bluerov2_heavy_underwater.world}"
 
 #------------------------------------------------------------------------------
-# 0b. Cek world vs FPV
-#------------------------------------------------------------------------------
-# Saat ini hanya bluerov2_heavy yang punya sensor fpv_camera.
-if [ "$USE_FPV" -eq 1 ] && [ "$WORLD_NAME" != "bluerov2_heavy_underwater.world" ]; then
-    echo "[ERROR] --fpv hanya tersedia untuk bluerov2_heavy_underwater.world."
-    echo "        World '$WORLD_NAME' belum punya sensor kamera."
-    exit 1
-fi
-
-#------------------------------------------------------------------------------
 # 1. Tolak jalan kalau sudah ada server Gazebo
 #------------------------------------------------------------------------------
 # CATATAN: proses `gz sim` sebenarnya bernama `ruby`, BUKAN `gz`.
@@ -100,6 +93,36 @@ if [ ! -f "$WORLD_PATH" ]; then
 fi
 
 #------------------------------------------------------------------------------
+# 2b. Siapkan GUI config untuk FPV (nama world bisa berbeda-beda)
+#------------------------------------------------------------------------------
+GUI_CONFIG="$REPO_DIR/worlds/fpv_gui.config"
+if [ "$USE_FPV" -eq 1 ]; then
+    if ! grep -q "model://bluerov2_heavy" "$WORLD_PATH"; then
+        echo "[ERROR] --fpv butuh world yang memuat model://bluerov2_heavy."
+        echo "        World '$WORLD_NAME' tidak memuatnya, jadi tidak ada"
+        echo "        sensor kamera yang bisa ditampilkan."
+        exit 1
+    fi
+
+    # Nama world di dalam SDF (dipakai di prefiks topik gz-transport).
+    WORLD_INNER_NAME=$(sed -n 's/.*<world name="\([^"]*\)".*/\1/p' "$WORLD_PATH" | head -n 1)
+    if [ -z "$WORLD_INNER_NAME" ]; then
+        echo "[ERROR] Tidak menemukan <world name=\"...\"> di $WORLD_PATH"
+        exit 1
+    fi
+
+    # Ganti hanya prefiks world pada baris <topic>, bukan komentar.
+    GUI_CONFIG="/tmp/fpv_gui_${WORLD_INNER_NAME}.config"
+    sed "s#<topic>/world/[^/]*/#<topic>/world/${WORLD_INNER_NAME}/#" \
+        "$REPO_DIR/worlds/fpv_gui.config" > "$GUI_CONFIG"
+
+    if ! grep -q "<topic>/world/${WORLD_INNER_NAME}/" "$GUI_CONFIG"; then
+        echo "[ERROR] Gagal menyiapkan topik FPV untuk world '$WORLD_INNER_NAME'."
+        exit 1
+    fi
+fi
+
+#------------------------------------------------------------------------------
 # 3. Environment
 #------------------------------------------------------------------------------
 export GZ_SIM_RESOURCE_PATH="$REPO_DIR/models:$REPO_DIR/worlds:${GZ_SIM_RESOURCE_PATH:-}"
@@ -119,6 +142,7 @@ echo "Plugin : $HOME/ardupilot_gazebo/build"
 if [ "$USE_FPV" -eq 1 ]; then
     echo "Kamera : FPV aktif (panel kanan, gambar dari hidung ROV)"
     echo "         TPP tetap: klik kanan bluerov2_heavy di Entity Tree > Follow"
+    echo "         Topik : /world/$WORLD_INNER_NAME/.../sensor/fpv_camera/image"
 else
     echo "Kamera : TPP saja (pakai --fpv untuk panel FPV)"
 fi
@@ -136,6 +160,6 @@ echo "=========================================================="
 cd "$REPO_DIR"
 
 if [ "$USE_FPV" -eq 1 ]; then
-    exec gz sim -v 3 -r --gui-config "$REPO_DIR/worlds/fpv_gui.config" "$WORLD_PATH"
+    exec gz sim -v 3 -r --gui-config "$GUI_CONFIG" "$WORLD_PATH"
 fi
 exec gz sim -v 3 -r "$WORLD_PATH"
