@@ -2,14 +2,16 @@
 
 Panduan menjalankan simulasi Gazebo Harmonic + ArduSub SITL di PC ini.
 
-Ada dua skenario:
+Ada tiga skenario:
 
 | Skenario | Tujuan | Butuh program `rovros2_ws`? |
 |---|---|---|
 | **A — Basic + QGroundControl** | Memastikan Gazebo, SITL, dan QGC sehat | Tidak |
 | **B — Uji `rovros2_ws`** | Menguji program ROV yang dideploy ke Jetson | Ya |
+| **C — Arena SAUVC** | Latihan babak penyisihan SAUVC (§1.7) | Tidak (opsional) |
 
 Skenario B = Skenario A + tiga flag `--out` + node ROS. **Kode `rovros2_ws` tidak diubah sama sekali.**
+Skenario C = Skenario A dengan world `sauvc_qualification.world`.
 
 Konfigurasi yang dipakai di seluruh dokumen:
 
@@ -18,6 +20,7 @@ Konfigurasi yang dipakai di seluruh dokumen:
 | Model | `bluerov2_heavy` (8 thruster) |
 | World | `bluerov2_heavy_underwater.world` |
 | Arena | `sim_course` — obstacle course statis (lihat §1.5) |
+| Arena SAUVC | `sauvc_qualification.world` — kolam + gate kualifikasi (lihat §1.7) |
 | Kamera | TPP (Follow) dan FPV opsional via `--fpv` (lihat §1.6) |
 | Frame SITL | `vectored_6dof` (`FRAME_CONFIG = 2`) |
 | Fisika | Gazebo Harmonic (`gz sim`) |
@@ -148,9 +151,9 @@ Spesifikasi sensor (`models/bluerov2_heavy/model.sdf.in`):
 |---|---|
 | Nama sensor | `fpv_camera` (di `base_link`) |
 | Posisi | `0.15 0 0.09` — di hidung, menghadap `+x` (maju) |
-| Resolusi | 640 × 480 |
-| `horizontal_fov` | 1.2 rad (±69°) |
-| `update_rate` | 15 Hz |
+| Resolusi | 1280 × 720 (16:9) |
+| `horizontal_fov` | 1.2 rad (±69°), VFOV ±42° |
+| `update_rate` | 15 Hz (terukur ±11 fps setelah bridge ROS) |
 
 Topik gambar yang dihasilkan:
 
@@ -176,6 +179,34 @@ Panel **FPV camera** muncul di sisi kanan jendela Gazebo, di samping 3D view.
 ROV → **Follow** seperti biasa. Untuk "pindah kamera", cukup lihat panel yang
 berbeda — tidak ada mode yang perlu dimatikan.
 
+Sejak stack SAUVC ditambahkan, ada panel kedua **Detection (SAUVC)** di
+bawahnya. Panel itu menampilkan gambar yang sama plus bounding box gate,
+titik center, garis error-x, dan status detektor. Sumbernya topik gz
+`/sauvc/debug`, yang diisi oleh `sauvc_qual_sim.launch.py` (bridge ROS → gz).
+
+| Panel | Sumber | Isi |
+|---|---|---|
+| FPV camera | sensor `fpv_camera` (gz) | gambar mentah |
+| Detection (SAUVC) | node `sauvc_cam` lewat bridge | gambar + bbox + error-x |
+
+Panel Detection akan **kosong** kalau `sauvc_qual_sim.launch.py` tidak jalan.
+Itu normal; FPV camera tetap berfungsi. Urutan start yang benar:
+
+```bash
+# 1. Gazebo dengan dua panel
+./scripts/start_sim.sh sauvc_qualification.world --fpv
+
+# 2. SITL + mavlink-router, lalu launch node SAUVC
+ros2 launch rov_startup sauvc_qual_sim.launch.py
+```
+
+Cek cepat bahwa gambar debug sampai ke Gazebo:
+
+```bash
+gz topic -l | grep sauvc/debug
+gz topic -e -t /sauvc/debug -n 1 | head -c 400
+```
+
 Tanpa flag `--fpv`, tampilan Gazebo sama persis seperti sebelumnya (tidak ada
 panel FPV, tidak ada perubahan perilaku).
 
@@ -187,8 +218,9 @@ panel FPV, tidak ada perubahan perilaku).
 - Panel FPV ada di file terpisah `worlds/fpv_gui.config`, dipakai lewat
   `gz sim --gui-config`. File ini tidak mengubah `~/.gz/sim/8/gui.config`
   milik Anda.
-- Hanya `bluerov2_heavy` yang punya kamera. `--fpv` dengan world lain akan
-  ditolak script.
+- Hanya model `bluerov2_heavy` yang punya kamera. `--fpv` bisa dipakai di
+  world mana pun yang memuat model itu (termasuk `sauvc_qualification.world`);
+  script menolak kalau world tidak memuatnya.
 
 #### Catatan performa
 
@@ -211,10 +243,136 @@ Selisihnya sekitar 7%, jadi 15 Hz aman. Kalau suatu saat RTF turun drastis:
 
 | Penyebab | Solusi |
 |---|---|
-| World lain (bukan `bluerov2_heavy`) | kamera hanya ada di `bluerov2_heavy` |
+| World tidak memuat `bluerov2_heavy` | kamera hanya ada di model itu |
 | Plugin `gz-sim-sensors-system` hilang dari world | tambahkan lagi (lihat §1.6 Syarat teknis) |
 | Gazebo baru start dan `lock_step` menunggu SITL | jalankan SITL dulu (§3 A2), gambar muncul setelah sim berjalan |
 | Simulasi masih paused | tekan Play di panel World control |
+
+### 1.7 Arena SAUVC (kualifikasi)
+
+World terpisah untuk latihan babak penyisihan SAUVC:
+`worlds/sauvc_qualification.world`. **World lain tidak diubah**; arena ini
+memakai model sendiri, bukan `sim_course`.
+
+```bash
+./scripts/start_sim.sh sauvc_qualification.world
+./scripts/start_sim.sh sauvc_qualification.world --fpv   # + panel kamera
+```
+
+Sistem koordinat:
+
+| Item | Nilai |
+|---|---|
+| `x = 0` | bibir kolam (garis start) |
+| `+x` | maju, masuk ke kolam |
+| `+y` | kiri |
+| `z = 0` | permukaan air |
+| Lebar kolam | 10 m (`y = -5 .. +5`) — asumsi, mudah diubah |
+| Gate | `x = 10`, sejajar bibir kolam |
+| Spawn ROV | `(0.4, 0, -0.6)`, menghadap gate |
+
+Profil dasar kolam:
+
+| Bagian | Rentang x | Kedalaman | z dasar |
+|---|---|---|---|
+| Datar dangkal | 0.0 – 1.8 m | 1.28 m | −1.28 |
+| Menurun | 1.8 – 19.3 m | 1.28 → 2.00 m | −1.28 → −2.00 |
+| Datar dalam | 19.3 – 20.3 m | 2.00 m | −2.00 |
+
+Gate (mengapung, sisi atas menempel permukaan air):
+
+| Bagian | Warna | Ukuran |
+|---|---|---|
+| 2 tiang | oranye `#FF910F` | diameter 4 cm, panjang 100 cm, di `y = ±0.75` |
+| Palang atas | putih `#FFFFFF` | diameter 4 cm, panjang 150 cm |
+
+Bukaan nominal 1.50 m × 1.00 m (antar pusat tiang, dari permukaan air).
+Karena pipa tebal 4 cm, bukaan bersih ±1.46 m × 0.96 m. Di `x = 10` dasar
+kolam −1.617 m, jadi ada ±0.62 m ruang di bawah gate.
+
+Permukaan kolam (keramik):
+
+| Item | Nilai |
+|---|---|
+| Ukuran keramik | 20 cm × 10 cm (sisi panjang melintang kolam di lantai, horizontal di dinding) |
+| Nat (grout) | 4 mm, biru tua |
+| Garis lane lantai | 4 garis, lebar 25 cm, di `y = ±1` dan `y = ±3` → 5 section @ 2 m, gate di section tengah |
+| Warna lantai (terukur) | `#22B0D2` (foto `#20B0D0`) |
+| Warna dinding (terukur) | `#0153A2` (foto `#0050A0`) |
+
+> Gazebo 8 di workspace ini tidak punya fog/penyerapan air, jadi warna biru
+> air "dibakar" ke tekstur keramik. Tekstur dan mesh dibuat oleh
+> `python3 scripts/make_pool_assets.py`; detail ada di
+> [`models/sauvc_pool/README.md`](models/sauvc_pool/README.md).
+
+> Warna gate disetel agar citra kamera benar-benar mendekati referensi:
+> terukur `#FE920F` (tiang) dan `#FEFFFF` (palang) dari `fpv_camera`.
+> Ini penting kalau pipeline vision memakai threshold warna. Detail dan
+> cara mengubah ada di [`models/sauvc_pool/README.md`](models/sauvc_pool/README.md).
+
+Catatan:
+
+- Gate bersifat **statis** (dipaku di permukaan, tidak ikut mengapung naik
+  turun). Buoyancy/hidrodinamika hanya bekerja pada ROV.
+- ROV tetap *positively buoyant* seperti di world lain; untuk latihan
+  kedalaman, selam dulu lalu tahan dengan `heave` atau `ALT_HOLD`.
+- `--fpv` otomatis menyesuaikan nama topik kamera dengan nama world, jadi
+  panel FPV tetap jalan tanpa mengedit config.
+
+#### 1.7.1 Stack ROS 2 SAUVC (kualifikasi)
+
+Node SAUVC ada di `rovros2_ws/src/rovros/rovros/sauvc_2027/`:
+
+| Node | Fungsi |
+|---|---|
+| `sauvc_cam` | kamera + deteksi gate (HSV) → `ROVCamera` + gambar debug |
+| `sauvc_qual` | state machine kualifikasi → `/rov/control/command` |
+
+Topik:
+
+| Topik | Tipe | Isi |
+|---|---|---|
+| `/sauvc/camera/image` | `sensor_msgs/Image` | FPV dari Gazebo (via bridge) |
+| `/sauvc/detection` | `rov_msgs/ROVCamera` | metadata + `ROVDetection[]` |
+| `/sauvc/debug` | `sensor_msgs/Image` | bbox + garis error-x |
+| `/rov/control/command` | `rov_msgs/ROVControl` | perintah ke `control_node` |
+
+Jalankan (SITL + mavlink-router harus sudah hidup):
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/ros2_projects/rovros2_ws/install/setup.bash
+
+# deteksi + misi + driver
+ros2 launch rov_startup sauvc_qual_sim.launch.py
+
+# plus jendela debug bbox
+ros2 launch rov_startup sauvc_qual_sim.launch.py show_debug:=true
+
+# hanya deteksi, tanpa SITL (control/depth/att tidak dijalankan)
+ros2 launch rov_startup sauvc_qual_sim.launch.py start_drivers:=false
+
+# trigger misi (pengganti kemiringan roll di simulasi)
+ros2 topic pub --once /rov/mission/trigger std_msgs/msg/Empty
+```
+
+Urutan misi: `ARM → DIVE (depth > 0.7 m) → SETTLE → FORWARD → TRACK →
+PASS → SETTLE → U-TURN → SETTLE → FORWARD → TRACK → PASS → SETTLE →
+SURFACE → DONE`. Koreksi hanya `yaw` dari `error_x` gate; tiap gerakan
+diikuti jeda diam. Trigger kedua saat misi berjalan = abort.
+
+Konfigurasi ada di `rovros2_ws/src/rovros/config/sauvc.yaml`
+(`target_depth`, `surge`, `yaw_kp`, `pass_bbox_h`, `settle_s`, dst).
+Deteksi sekarang memakai HSV tanpa ML; untuk pindah ke YOLO nanti cukup
+mengisi `model_path` di YAML itu (backend YOLO menyusul).
+
+Cek cepat:
+
+```bash
+ros2 node list | grep sauvc        # sauvc_cam, sauvc_qual
+ros2 topic echo --once /sauvc/detection
+ros2 topic echo /rov/control/command
+```
 
 ---
 
@@ -539,6 +697,12 @@ Skenario B (uji rovros2_ws)
         --out 127.0.0.1:14551 --out 127.0.0.1:14552 --out 127.0.0.1:14553
   B3  QGC (opsional)
   B4  ros2 launch rov_startup rov_videosubmission.launch.py
+
+Skenario C (arena SAUVC / latihan kualifikasi)
+  C0  ./scripts/check_sim.sh
+  C1  ./scripts/start_sim.sh sauvc_qualification.world --fpv
+  C2  sim_vehicle.py -f vectored_6dof -N --model=JSON
+  C3  QGC (opsional)
 ```
 
 Urutan start selalu: **bersihkan → Gazebo → SITL → QGC → node ROS.**
