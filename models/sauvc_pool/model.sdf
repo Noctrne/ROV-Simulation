@@ -1,0 +1,215 @@
+<?xml version="1.0" ?>
+<!-- Static swimming pool for the SAUVC qualification arena.
+
+     It is <static>true</static>, so the Buoyancy and Hydrodynamics plugins
+     ignore it. Only the ROV is simulated dynamically.
+
+     Reference frame (all numbers in metres):
+       * water surface is z = 0
+       * x = 0 is the pool edge (start line); +x points into the pool
+       * +y is left, +z is up
+       * pool is 10 m wide (y = -5 .. +5)
+
+     Bottom profile along x (this is the part that matters for the course):
+
+         x = 0.0 .. 1.8    flat,    z = -1.28   (shallow shelf)
+         x = 1.8 .. 19.3   slope,   z = -1.28 .. -2.00  (17.5 m run, 0.72 m drop)
+         x = 19.3 .. 20.3  flat,    z = -2.00   (deep end)
+
+     The gate (model://sauvc_gate) is a separate model so it can be moved
+     without touching the pool.
+
+     Visuals vs collisions:
+
+     Collisions are the same axis-aligned / pitched boxes as before. They are
+     invisible. The visible surface is a set of meshes instead, because a
+     box's default UVs stretch one texture across the whole face: the tiles
+     would be huge and would smear on the slope.
+
+     meshes/floor.obj, meshes/walls.obj and meshes/markings.obj are authored
+     directly in *world* coordinates with UVs measured in world metres, so
+     they live in links whose pose is the identity. That keeps the 1 m tile
+     texture at a physical 20 cm x 10 cm on every face, including the sloped
+     floor. Regenerate them with:
+
+         python3 scripts/make_pool_assets.py
+
+     See README.md in this directory for the tile colours and how to change
+     the tile size.
+-->
+<sdf version="1.6">
+  <model name="sauvc_pool">
+    <static>true</static>
+
+    <!-- ================================================================
+         Collisions (invisible, exact geometry)
+         ================================================================ -->
+
+    <!-- Flat shallow shelf next to the pool edge: top surface z = -1.28 -->
+    <link name="floor_shallow">
+      <pose>0.9 0 -1.43 0 0 0</pose>
+      <collision name="collision">
+        <geometry>
+          <box>
+            <size>1.8 10 0.3</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+
+    <!-- Sloped section. The top face runs from (1.8, -1.28) to (19.3, -2.00).
+         Length along the slope is sqrt(17.5^2 + 0.72^2) = 17.5148 m and the
+         pitch is atan(0.72 / 17.5) = 0.041120 rad. The box centre is offset
+         half its thickness along the local +z normal so that the *top* face
+         lands on the profile line above. -->
+    <link name="floor_slope">
+      <pose>10.5438 0 -1.7899 0 0.041120 0</pose>
+      <collision name="collision">
+        <geometry>
+          <box>
+            <size>17.5148 10 0.3</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+
+    <!-- Flat deep section: top surface z = -2.00 -->
+    <link name="floor_deep">
+      <pose>19.8 0 -2.15 0 0 0</pose>
+      <collision name="collision">
+        <geometry>
+          <box>
+            <size>1.0 10 0.3</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+
+    <!-- Pool edge wall at x = 0. Top sticks 0.3 m above the water surface. -->
+    <link name="wall_start">
+      <pose>-0.15 0 -1.0 0 0 0</pose>
+      <collision name="collision">
+        <geometry>
+          <box>
+            <size>0.3 10 2.6</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+
+    <!-- Far wall at x = 20.3 -->
+    <link name="wall_end">
+      <pose>20.45 0 -1.0 0 0 0</pose>
+      <collision name="collision">
+        <geometry>
+          <box>
+            <size>0.3 10 2.6</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+
+    <!-- Left wall at y = +5 -->
+    <link name="wall_left">
+      <pose>10.15 5.15 -1.0 0 0 0</pose>
+      <collision name="collision">
+        <geometry>
+          <box>
+            <size>20.9 0.3 2.6</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+
+    <!-- Right wall at y = -5 -->
+    <link name="wall_right">
+      <pose>10.15 -5.15 -1.0 0 0 0</pose>
+      <collision name="collision">
+        <geometry>
+          <box>
+            <size>20.9 0.3 2.6</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+
+    <!-- ================================================================
+         Visuals (textured meshes, authored in world coordinates)
+         ================================================================ -->
+
+    <!-- Floor: shallow shelf + slope + deep end, tiled. -->
+    <link name="floor_visual">
+      <visual name="tiles">
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <mesh>
+            <uri>model://sauvc_pool/meshes/floor.obj</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.25 0.25 0.25 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_pool/materials/pool_tiles_floor.png</albedo_map>
+              <roughness>0.30</roughness>
+              <metalness>0.0</metalness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+    </link>
+
+    <!-- Walls: blue tiles with a patterned emissive map, because vertical
+         faces get no direct sunlight in this scene. UVs are world-metre
+         based, so the grout lines line up with the floor across the edges. -->
+    <link name="walls_visual">
+      <visual name="tiles">
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <mesh>
+            <uri>model://sauvc_pool/meshes/walls.obj</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.25 0.25 0.25 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_pool/materials/pool_tiles_wall.png</albedo_map>
+              <emissive_map>model://sauvc_pool/materials/pool_tiles_wall_emissive.png</emissive_map>
+              <roughness>0.30</roughness>
+              <metalness>0.0</metalness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+    </link>
+
+    <!-- Dark blue line work: lane lines on the floor and lane stripes on the
+         pool-edge wall. Kept in its own link so it never z-fights with the
+         tiles. -->
+    <link name="markings_visual">
+      <visual name="lanes">
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <mesh>
+            <uri>model://sauvc_pool/meshes/markings.obj</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.25 0.25 0.25 1</specular>
+          <emissive>0 0.015 0.045 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_pool/materials/lane_blue.png</albedo_map>
+              <roughness>0.30</roughness>
+              <metalness>0.0</metalness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

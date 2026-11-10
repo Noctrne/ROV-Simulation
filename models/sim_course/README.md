@@ -1,8 +1,9 @@
 # `models/sim_course` — Static training course
 
 Obstacle course placed around the ROV spawn point at `(0, 0, -2)`.
-Used by all three worlds in this repo (`bluerov2_underwater.world`,
-`bluerov2_heavy_underwater.world`, `bluerov2_ping.world`).
+Used by the three BlueROV2 training worlds in this repo
+(`bluerov2_underwater.world`, `bluerov2_heavy_underwater.world`,
+`bluerov2_ping.world`). The SAUVC arena uses `models/sauvc_pool` instead.
 
 For the full simulation procedure (Gazebo + ArduSub SITL + QGroundControl +
 ROS 2), see [`RUNBOOK_SIMULASI.md`](../../RUNBOOK_SIMULASI.md).
